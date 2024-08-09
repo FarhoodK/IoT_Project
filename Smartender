@@ -1,9 +1,7 @@
 import json
 import threading
-from tqdm import tqdm
 import time
-import random
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class Smartender:
     """Main class to handle the Smartender operations."""
