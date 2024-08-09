@@ -3,7 +3,7 @@ import threading
 import time
 from datetime import datetime
 from TemperatureSensor import TemperatureSensor
-from Cocktail import Coktail
+from Cocktail import Cocktail
 from FloatSwitch import FloarSwitch
 from Pump import pump
 
