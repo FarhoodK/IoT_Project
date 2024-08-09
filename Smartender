@@ -2,6 +2,10 @@ import json
 import threading
 import time
 from datetime import datetime
+from TemperatureSensor import TemperatureSensor
+from Cocktail import Coktail
+from FloatSwitch import FloarSwitch
+from Pump import pump
 
 class Smartender:
     """Main class to handle the Smartender operations."""
@@ -170,3 +174,12 @@ class Smartender:
 
                 print("Your cocktail is ready. Enjoy!")
                 return
+
+if __name__ == "__main__":
+    smartender = Smartender('cocktails.json')
+    smartender.show_cocktails(smartender.available_cocktails)
+    smartender.configure()
+
+    while True:
+        smartender.show_cocktails(smartender.selected_cocktails)
+        smartender.make_cocktail()
