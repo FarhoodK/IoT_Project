@@ -1,0 +1,154 @@
+{
+    "Margarita": {
+        "ingredients": {
+            "Tequila": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Triple Sec": {"quantity": 20, "temperature": "cold", "optimal_temp_C": 4},
+            "Lime Juice": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the tequila, triple sec, and lime juice into a shaker with ice.",
+            "Shake well.",
+            "Strain into a chilled cocktail glass."
+        ]
+    },
+    "Martini": {
+        "ingredients": {
+            "Gin or Vodka": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Dry Vermouth": {"quantity": 10, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the gin or vodka and dry vermouth into a mixing glass with ice cubes.",
+            "Stir well.",
+            "Strain into a chilled martini glass.",
+            "Garnish with an olive or a lemon twist."
+        ]
+    },
+    "Manhattan": {
+        "ingredients": {
+            "Whiskey": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Sweet Vermouth": {"quantity": 20, "temperature": "cold", "optimal_temp_C": 4},
+            "Bitters": {"quantity": 1, "temperature": "room", "optimal_temp_C": 22}
+        },
+        "steps": [
+            "Pour the whiskey, sweet vermouth, and bitters into a mixing glass with ice.",
+            "Stir well.",
+            "Strain into a chilled cocktail glass.",
+            "Garnish with a cherry."
+        ]
+    },
+    "Daiquiri": {
+        "ingredients": {
+            "Rum": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Lime Juice": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4},
+            "Simple Syrup": {"quantity": 10, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the rum, lime juice, and simple syrup into a shaker with ice.",
+            "Shake well.",
+            "Strain into a chilled cocktail glass."
+        ]
+    },
+    "Gin and Tonic": {
+        "ingredients": {
+            "Gin": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Tonic Water": {"quantity": 100, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the gin into a glass filled with ice.",
+            "Top with tonic water.",
+            "Stir gently.",
+            "Garnish with a lime wheel."
+        ]
+    },
+    "Gin Lemon": {
+        "ingredients": {
+            "Gin": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Lemon Soda": {"quantity": 100, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the gin into a glass filled with ice.",
+            "Top with lemon soda."
+        ]
+    },
+    "Mojito": {
+        "ingredients": {
+            "Rum": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Lime Juice": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4},
+            "Simple Syrup": {"quantity": 10, "temperature": "cold", "optimal_temp_C": 4},
+            "Soda Water": {"quantity": 100, "temperature": "cold", "optimal_temp_C": 4},
+            "Mint": {"quantity": 10, "temperature": "room", "optimal_temp_C": 22}
+        },
+        "steps": [
+            "Muddle the mint with lime juice and simple syrup in a glass.",
+            "Add rum and fill the glass with ice.",
+            "Top with soda water.",
+            "Stir gently and garnish with a mint sprig."
+        ]
+    },
+    "Whiskey Sour": {
+        "ingredients": {
+            "Whiskey": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Lemon Juice": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4},
+            "Simple Syrup": {"quantity": 10, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the whiskey, lemon juice, and simple syrup into a shaker with ice.",
+            "Shake well.",
+            "Strain into an ice-filled old-fashioned glass."
+        ]
+    },
+    "Tom Collins": {
+        "ingredients": {
+            "Gin": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Lemon Juice": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4},
+            "Simple Syrup": {"quantity": 10, "temperature": "cold", "optimal_temp_C": 4},
+            "Soda Water": {"quantity": 100, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the gin, lemon juice, and simple syrup into a shaker with ice.",
+            "Shake lightly.",
+            "Strain into a large glass filled with ice.",
+            "Top with soda water.",
+            "Garnish with a slice of lemon and a cherry."
+        ]
+    },
+    "Cosmopolitan": {
+        "ingredients": {
+            "Vodka": {"quantity": 40, "temperature": "cold", "optimal_temp_C": 4},
+            "Triple Sec": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4},
+            "Cranberry Juice": {"quantity": 30, "temperature": "cold", "optimal_temp_C": 4},
+            "Lime Juice": {"quantity": 15, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the vodka, triple sec, cranberry juice, and lime juice into a shaker with ice.",
+            "Shake well.",
+            "Strain into a chilled cocktail glass.",
+            "Garnish with a lime wheel."
+        ]
+    },
+    "Negroni": {
+        "ingredients": {
+            "Gin": {"quantity": 30, "temperature": "cold", "optimal_temp_C": 4},
+            "Sweet Vermouth": {"quantity": 30, "temperature": "cold", "optimal_temp_C": 4},
+            "Campari": {"quantity": 30, "temperature": "cold", "optimal_temp_C": 4}
+        },
+        "steps": [
+            "Pour the gin, sweet vermouth, and Campari into a mixing glass with ice.",
+            "Stir well.",
+            "Strain into an ice-filled old-fashioned glass.",
+            "Garnish with an orange slice."
+        ]
+    },
+    "Tequila Sunrise": {
+        "ingredients": {
+            "Tequila": {"quantity": 50, "temperature": "cold", "optimal_temp_C": 4},
+            "Orange Juice": {"quantity": 100, "temperature": "cold", "optimal_temp_C": 4},
+            "Grenadine": {"quantity": 15, "temperature": "room", "optimal_temp_C": 22}
+        },
+        "steps": [
+            "Pour the tequila and orange juice into a glass filled with ice.",
+            "Add the grenadine, which will sink and gradually rise to mix with the other ingredients.",
+            "Do not stir, garnish with an orange slice and cherry."
+        ]
+    }
+}
