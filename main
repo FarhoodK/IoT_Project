@@ -1,3 +1,10 @@
+from Cocktail import Cocktail
+from Pump import Pump
+from FloatSwitch import FloatSwitch
+from TemperatureSensor import TemperatureSensor
+from Smartender import Smartender
+
+
 if __name__ == "__main__":
     smartender = Smartender('cocktails.json')
     smartender.show_cocktails(smartender.available_cocktails)
