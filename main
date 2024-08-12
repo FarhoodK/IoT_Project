@@ -1,0 +1,8 @@
+if __name__ == "__main__":
+    smartender = Smartender('cocktails.json')
+    smartender.show_cocktails(smartender.available_cocktails)
+    smartender.configure()
+
+    while True:
+        smartender.show_cocktails(smartender.selected_cocktails)
+        smartender.make_cocktail()
