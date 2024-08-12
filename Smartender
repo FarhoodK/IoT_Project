@@ -2,10 +2,6 @@ import json
 import threading
 import time
 from datetime import datetime
-from TemperatureSensor import TemperatureSensor
-from Cocktail import Cocktail
-from FloatSwitch import FloarSwitch
-from Pump import pump
 
 class Smartender:
     """Main class to handle the Smartender operations."""
