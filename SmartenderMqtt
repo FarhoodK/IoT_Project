@@ -1,9 +1,9 @@
 import json
 import threading
 import time
-from puump import Pump
+from PumpMqtt import Pump
 from cocktail import Cocktail
-from floatS import FloatSwitch
+from floatSwitch import FloatSwitch
 from TemperatureSensor import TemperatureSensor
 from MQTT_Smartender import MqttClient
 from datetime import datetime
