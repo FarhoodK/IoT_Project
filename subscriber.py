@@ -1,4 +1,4 @@
-from MQTT_Smartender import MqttClient
+from publisher import MqttClient
 
 broker = "mqtt.eclipseprojects.io"
 topic = "smartender/status"
