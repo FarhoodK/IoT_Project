@@ -1,7 +1,8 @@
-from smartender import Smartender
+
+from smartender_REST import SmartenderAPI
 
 if __name__ == "__main__":
-    smartender = Smartender('cocktails.json')
+    smartender = SmartenderAPI('cocktails.json')
     smartender.show_cocktails(smartender.available_cocktails)
     smartender.configure()
 
