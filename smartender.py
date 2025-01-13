@@ -7,7 +7,8 @@ from floatswitch import FloatSwitch
 from temperaturesensor import TemperatureSensor
 from publisher import MqttClient
 from datetime import datetime
-from tqdm import tqdm  # Import the tqdm library
+from tqdm import tqdm
+
 
 class Smartender:
     """Main class to handle the Smartender operations."""
@@ -23,9 +24,10 @@ class Smartender:
         self.active_pumps = []
         self.cooling_thread = None
         self.cooling_event = threading.Event()
+        self.telegram_bot = None
 
         # Start MQTT client
-        self.mqtt_client = MqttClient(broker="mqtt.eclipseprojects.io",topic="smartender/status")
+        self.mqtt_client = MqttClient(broker="mqtt.eclipseprojects.io", topic="smartender/status")
         self.mqtt_client.connect()
 
         self.load_cocktails()
@@ -42,6 +44,30 @@ class Smartender:
             print(f"An error occurred while loading cocktails: {e}")
         print('daje roma sempre')
 
+    def save_selected_cocktails(self):
+        """Save selected cocktails to a JSON file for the Telegram bot."""
+        if not self.selected_cocktails:
+            print("No cocktails selected yet")
+            return False
+
+        try:
+            data = {
+                "available_cocktails": [
+                    {
+                        "name": cocktail.name,
+                        "ingredients": list(cocktail.ingredients.keys())
+                    }
+                    for cocktail in self.selected_cocktails
+                ]
+            }
+
+            with open('selected_cocktails.json', 'w') as file:
+                json.dump(data, file, indent=4)
+            print("Selected cocktails saved to JSON file successfully")
+            return True
+        except Exception as e:
+            print(f"Error saving cocktails to JSON: {str(e)}")
+            return False
 
     def display_pump_status(self):
         """Display status of all active pumps."""
@@ -91,7 +117,7 @@ class Smartender:
                 if not self.pump_exists(ingredient):
                     self.active_pumps.append(
                         Pump(id, ingredient, details['temperature'], None, [cocktail.name], TemperatureSensor(),
-                             FloatSwitch(), datetime.now(), self.mqtt_client)) # Add MQTT client instance
+                             FloatSwitch(), datetime.now(), self.mqtt_client))  # Add MQTT client instance
                     id += 1
                 else:
                     self.update_pump_cocktails(ingredient, cocktail.name)
@@ -110,7 +136,8 @@ class Smartender:
     def cooling_progress_bar(self, total_time):
         """Show a progress bar to simulate ingredients cooling waiting time."""
         self.cooling_event.clear()
-        with tqdm(total=total_time, desc="Cooling Ingredients", bar_format="{l_bar}{bar} [time left: {remaining}]") as pbar:
+        with tqdm(total=total_time, desc="Cooling Ingredients",
+                  bar_format="{l_bar}{bar} [time left: {remaining}]") as pbar:
             while not self.cooling_event.is_set() and pbar.n < total_time:
                 time.sleep(1)
                 pbar.update(1)
@@ -188,3 +215,5 @@ class Smartender:
 
                 print("Your cocktail is ready. Enjoy!")
                 return
+
+
