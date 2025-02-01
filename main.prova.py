@@ -1,9 +1,13 @@
 from smartender import Smartender
+from smartender_bot import SmartenderBot
 
 if __name__ == "__main__":
-    smartender = Smartender(r'/Users/lapodalessandris/Desktop/IoT Project/cocktails.json')
+    smartender = Smartender('cocktails.json')
+    smartender_bot = SmartenderBot("6401650950:AAEZq16vHRDu9sQyFYKUqfhWFH1LZtDKHZA", smartender)
     smartender.show_cocktails(smartender.available_cocktails)
     smartender.configure()
+    smartender.save_selected_cocktails()
+    smartender_bot.start()
 
     action = input("Press R to run, T to test\t")
     if action.lower() == "r":
