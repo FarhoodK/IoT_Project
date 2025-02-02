@@ -7,7 +7,7 @@ from floatswitch import FloatSwitch
 from temperaturesensor import TemperatureSensor
 from publisher import MqttClient
 from datetime import datetime
-from tqdm import tqdm  # Import the tqdm library
+from tqdm import tqdm
 
 class Smartender:
     """Main class to handle the Smartender operations."""
@@ -24,8 +24,11 @@ class Smartender:
         self.cooling_thread = None
         self.cooling_event = threading.Event()
 
-        # Start MQTT client
-        self.mqtt_client = MqttClient(broker="mqtt.eclipseprojects.io",topic="smartender/status")
+        # Initialize MQTT client
+        self.mqtt_client = MqttClient(
+            broker="mqtt.eclipseprojects.io",
+            topic="smartender/status"
+        )
         self.mqtt_client.connect()
 
         self.load_cocktails()
@@ -36,9 +39,11 @@ class Smartender:
             with open(self.filename1, 'r') as file:
                 data = json.load(file)
                 for name, details in data.items():
-                    self.available_cocktails.append(Cocktail(name, **details))
+                    self.available_cocktails.append(
+                        Cocktail(name, details['ingredients'], details['steps'])
+                    )
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"An error occurred while loading cocktails: {e}")
+            print(f"Error loading cocktails: {e}")
 
     def display_pump_status(self):
         """Display status of all active pumps."""
@@ -82,14 +87,23 @@ class Smartender:
 
     def setup_pumps(self):
         """Set up pumps for selected ingredients and cocktails."""
-        id = 0
+        pump_id = 0
         for cocktail in self.selected_cocktails:
             for ingredient, details in cocktail.ingredients.items():
                 if not self.pump_exists(ingredient):
-                    self.active_pumps.append(
-                        Pump(id, ingredient, details['temperature'], None, [cocktail.name], TemperatureSensor(),
-                             FloatSwitch(), datetime.now(), self.mqtt_client)) # Add MQTT client instance
-                    id += 1
+                    new_pump = Pump(
+                        id=pump_id,
+                        ingredient=ingredient,
+                        temperature=details['temperature'],
+                        maintenance=None,
+                        cocktails=[cocktail.name],
+                        temperature_sensor=TemperatureSensor(),
+                        float_switch=FloatSwitch(),
+                        last_refill_time=datetime.now(),
+                        mqtt_client=self.mqtt_client
+                    )
+                    self.active_pumps.append(new_pump)
+                    pump_id += 1
                 else:
                     self.update_pump_cocktails(ingredient, cocktail.name)
         print("Pumps successfully configured!\n")
@@ -99,10 +113,11 @@ class Smartender:
         return any(pump.ingredient == ingredient for pump in self.active_pumps)
 
     def update_pump_cocktails(self, ingredient, cocktail_name):
-        """Update the list of cocktails for an existing pump, (for cocktails sharing some ingredients)."""
+        """Update the list of cocktails for an existing pump."""
         for pump in self.active_pumps:
             if pump.ingredient == ingredient:
-                pump.cocktails.append(cocktail_name)
+                if cocktail_name not in pump.cocktails:
+                    pump.cocktails.append(cocktail_name)
 
     def cooling_progress_bar(self, total_time):
         """Show a progress bar to simulate ingredients cooling waiting time."""
@@ -114,7 +129,7 @@ class Smartender:
 
     def wait_for_ingredients(self, pumps, optimal_temps):
         """Wait until all ingredients are at their optimal temperature."""
-        total_cooling_time = 0.1 * 60  # 10 minutes cooling time
+        total_cooling_time = 10 * 60  # 10 minutes cooling time
         while True:
             all_optimal = all(
                 pump.temperature_sensor.read_temperature(pump.last_refill_time) <= optimal_temp
@@ -125,10 +140,12 @@ class Smartender:
                 print("All ingredients have reached their optimal temperatures.")
                 return
 
-            print(
-                "Some ingredients are still above their optimal temperatures. Please wait a few minutes or choose another cocktail.")
+            print("Some ingredients are still above optimal temperatures. Please wait or choose another cocktail.")
             if not self.cooling_thread or not self.cooling_thread.is_alive():
-                self.cooling_thread = threading.Thread(target=self.cooling_progress_bar, args=(total_cooling_time,))
+                self.cooling_thread = threading.Thread(
+                    target=self.cooling_progress_bar,
+                    args=(total_cooling_time,)
+                )
                 self.cooling_thread.start()
 
             user_input = self.get_user_input("Press 'b' to choose another cocktail: ")
@@ -141,7 +158,7 @@ class Smartender:
         """Prepare the selected cocktail."""
         if cocktail_name is None:
             user_input = self.get_user_input(
-                "What cocktail do you want to drink? Choose one or more from the available options\t")
+                "What cocktail do you want to drink? Choose one from the available options\t")
             if user_input is None:
                 return
         else:
@@ -149,39 +166,42 @@ class Smartender:
 
         for cocktail in self.selected_cocktails:
             if user_input.lower() == cocktail.name.lower():
-                print(f"\nYou chose {cocktail.name}!\n")
+                print(f"\nPreparing {cocktail.name}!\n")
                 ingredients_to_cool = []
                 optimal_temps = []
 
+                # First pass: Check quantities and temperatures
                 for ingredient, details in cocktail.ingredients.items():
-                    ingredient_name = ingredient
-                    ml = details['quantity']
-                    optimal_temp = details['optimal_temp_C']
-
                     for pump in self.active_pumps:
-                        if pump.ingredient == ingredient_name:
-                            required_qty_percent = ((ml / 10) / pump.float_switch.quantity) * 100
+                        if pump.ingredient == ingredient:
+                            required_ml = details['quantity']
+                            required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
+                            optimal_temp = details['optimal_temp_C']
 
-                            if pump.float_switch.left_quantity <= required_qty_percent:
-                                print(f"Not enough {ingredient_name} left to make {cocktail.name}. Refilling the pump.")
+                            # Check and refill if needed
+                            if pump.float_switch.left_quantity < required_qty_percent:
+                                print(f"Refilling {ingredient}...")
                                 pump.refill()
 
-                            if pump.temperature_sensor.read_temperature(pump.last_refill_time) > optimal_temp:
+                            # Check temperature
+                            current_temp = pump.temperature_sensor.read_temperature(pump.last_refill_time)
+                            if current_temp > optimal_temp:
                                 ingredients_to_cool.append(pump)
                                 optimal_temps.append(optimal_temp)
 
+                # Handle temperature requirements
                 if ingredients_to_cool:
                     self.wait_for_ingredients(ingredients_to_cool, optimal_temps)
                     return
 
+                # Second pass: Actual dispensing
                 for ingredient, details in cocktail.ingredients.items():
-                    ingredient_name = ingredient
-                    ml = details['quantity']
-                    optimal_temp = details['optimal_temp_C']
                     for pump in self.active_pumps:
-                        if pump.ingredient == ingredient_name:
-                            required_qty_percent = ((ml / 10) / pump.float_switch.quantity) * 100
-                            pump.erogate(ingredient_name, ml, optimal_temp, required_qty_percent)
+                        if pump.ingredient == ingredient:
+                            required_ml = details['quantity']
+                            optimal_temp = details['optimal_temp_C']
+                            required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
+                            pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
 
-                print("Your cocktail is ready. Enjoy!")
+                print("Your cocktail is ready. Enjoy!\n")
                 return

@@ -15,3 +15,4 @@ class FloatSwitch:
         self.left_quantity -= erogated_qty
         self.maintenance = "Required" if self.left_quantity <= 10 else "Not required"
         return round(self.left_quantity, 2)
+    
