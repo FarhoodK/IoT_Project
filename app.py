@@ -46,7 +46,7 @@ if menu == "Home":
         It's an efficient and fun way to enjoy perfect cocktails every time!
     """)
 
-    st.image("/Users/lapodalessandris/Desktop/IoT Project/undefined-Imgur-ezgif.com-effects.gif",
+    st.image("dicaprio.jpg",
              use_container_width=True,
              caption="Cheers!"
              )
@@ -58,38 +58,12 @@ if menu == "Home":
 
 # Make Cocktail Page
 elif menu == "Make Cocktail":
-    st.subheader("Make a Cocktail")
-    if not smartender.selected_cocktails:
-        st.warning("No cocktails available. Please ask admin to configure the system.")
-    else:
-        cols = st.columns(3)
-        for idx, cocktail in enumerate(smartender.selected_cocktails):
-            col_idx = idx % 3
-            with cols[col_idx]:
-                with st.expander(cocktail.name):
-                    st.write("### Ingredients:")
-                    for ingredient, details in cocktail.ingredients.items():
-                        st.write(f"- {ingredient}: {details['quantity']}ml at {details['optimal_temp_C']}°C")
-        selected_cocktail = st.selectbox(
-            "Choose cocktail", [c.name for c in smartender.selected_cocktails]
-        )
-        if st.button("Make Cocktail"):
-            with st.spinner(f"Preparing {selected_cocktail}..."):
-                cocktail_to_make = next(
-                    (c for c in smartender.selected_cocktails if c.name == selected_cocktail), None
-                )
-                if cocktail_to_make:
-                    total_steps = len(cocktail_to_make.ingredients)
-                    progress_bar = st.progress(0)
-                    for i, (ingredient, details) in enumerate(cocktail_to_make.ingredients.items(), 1):
-                        for pump in smartender.active_pumps:
-                            if pump.ingredient == ingredient:
-                                pump.erogate(ingredient, details['quantity'], details['optimal_temp_C'], details['quantity']/10)
-                                st.write(
-                                    f"Dispensing {details['quantity']} ml of {ingredient} at {details['optimal_temp_C']}°C...")
+    st.subheader("Smartender Status")
 
-                        progress_bar.progress(i/total_steps)
-                    st.success(f"Your {selected_cocktail} is ready! Enjoy!")
+    # Display the current status
+    if smartender.status == "Idle":
+        st.write("Smartender is idle. Ready to make a cocktail.")
+
 
 # Admin Section
 elif menu == "Admin":
@@ -135,6 +109,8 @@ elif menu == "Admin":
                 st.session_state.selected_cocktails = selected_cocktails
                 for cocktail_name in selected_cocktails:
                     smartender.add_cocktail(cocktail_name)
+                    smartender.save_selected_cocktails(cocktail_name)
+                smartender.selected_to_json()
                 smartender.setup_pumps()
                 st.success("Pumps configured successfully!")
 

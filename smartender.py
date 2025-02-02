@@ -9,6 +9,7 @@ from publisher import MqttClient
 from datetime import datetime
 from tqdm import tqdm
 
+
 class Smartender:
     """Main class to handle the Smartender operations."""
 
@@ -23,6 +24,10 @@ class Smartender:
         self.active_pumps = []
         self.cooling_thread = None
         self.cooling_event = threading.Event()
+        self.telegram_bot = None
+        self.data = {"selected_cocktails": []}
+        self.status = "Idle"
+        self.current_task = None
 
         # Initialize MQTT client
         self.mqtt_client = MqttClient(
@@ -44,6 +49,19 @@ class Smartender:
                     )
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Error loading cocktails: {e}")
+
+    def save_selected_cocktails(self, cocktail_name):
+        """Save selected cocktails."""
+        for cocktail in self.available_cocktails:
+            if cocktail.name == cocktail_name:
+                self.data["selected_cocktails"].append(cocktail.to_dict())
+                break
+
+    def selected_to_json(self):
+        """Write selected cocktails to JSON for the Telegram Bot to read."""
+        print(self.data)
+        with open('selected_cocktails.json', 'w') as file:
+            json.dump(self.data, file, indent=4)
 
     def display_pump_status(self):
         """Display status of all active pumps."""
@@ -122,7 +140,8 @@ class Smartender:
     def cooling_progress_bar(self, total_time):
         """Show a progress bar to simulate ingredients cooling waiting time."""
         self.cooling_event.clear()
-        with tqdm(total=total_time, desc="Cooling Ingredients", bar_format="{l_bar}{bar} [time left: {remaining}]") as pbar:
+        with tqdm(total=total_time, desc="Cooling Ingredients",
+                  bar_format="{l_bar}{bar} [time left: {remaining}]") as pbar:
             while not self.cooling_event.is_set() and pbar.n < total_time:
                 time.sleep(1)
                 pbar.update(1)
@@ -154,18 +173,12 @@ class Smartender:
                 self.cooling_thread.join()
                 return
 
-    def make_cocktail(self, cocktail_name=None):
+    def make_cocktail(self, cocktail_name=None, user="UNKNOWN"):
         """Prepare the selected cocktail."""
-        if cocktail_name is None:
-            user_input = self.get_user_input(
-                "What cocktail do you want to drink? Choose one from the available options\t")
-            if user_input is None:
-                return
-        else:
-            user_input = cocktail_name
-
+        self.status = f"Making cocktail for {user}"
+        self.current_task = "Cocktail"
         for cocktail in self.selected_cocktails:
-            if user_input.lower() == cocktail.name.lower():
+            if cocktail_name.lower() == cocktail.name.lower():
                 print(f"\nPreparing {cocktail.name}!\n")
                 ingredients_to_cool = []
                 optimal_temps = []
@@ -204,4 +217,6 @@ class Smartender:
                             pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
 
                 print("Your cocktail is ready. Enjoy!\n")
+                self.status = "Idle"
+                self.current_task = None
                 return
