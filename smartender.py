@@ -24,7 +24,6 @@ class Smartender:
         self.active_pumps = []
         self.cooling_thread = None
         self.cooling_event = threading.Event()
-        self.telegram_bot = None
         self.data = {"selected_cocktails": []}
         self.status = "Idle"
         self.current_task = None
@@ -32,7 +31,7 @@ class Smartender:
         # Initialize MQTT client
         self.mqtt_client = MqttClient(
             broker="mqtt.eclipseprojects.io",
-            topic="smartender/status"
+            topic="smartender/"
         )
         self.mqtt_client.connect()
 
@@ -83,7 +82,7 @@ class Smartender:
 
     def configure(self):
         """Handles Smartender configuration."""
-        print("Welcome to your SmarTender!\n")
+        print("Welcome to your Smartender!\n")
         while len(self.selected_ingredients) < 20:
             user_input = self.get_user_input(
                 "What cocktails do you want to make? Choose one or more from the available options: q to quit\t")
@@ -101,7 +100,7 @@ class Smartender:
                 for ingredient in cocktail.ingredients:
                     if ingredient not in self.selected_ingredients:
                         self.selected_ingredients.append(ingredient)
-                print(f"{cocktail.name} added to your Smartender\n")
+                print(f"{cocktail.name} added to Smartender\n")
 
     def setup_pumps(self):
         """Set up pumps for selected ingredients and cocktails."""
@@ -148,7 +147,7 @@ class Smartender:
 
     def wait_for_ingredients(self, pumps, optimal_temps):
         """Wait until all ingredients are at their optimal temperature."""
-        total_cooling_time = 10 * 60  # 10 minutes cooling time
+        total_cooling_time = 10  # 10 seconds cooling time
         while True:
             all_optimal = all(
                 pump.temperature_sensor.read_temperature(pump.last_refill_time) <= optimal_temp
@@ -174,12 +173,28 @@ class Smartender:
                 return
 
     def make_cocktail(self, cocktail_name=None, user="UNKNOWN"):
-        """Prepare the selected cocktail."""
+        """Prepare the selected cocktail with MQTT status updates."""
+        # Publish cocktail order start
+        self.mqtt_client.publish('cocktail_order', {
+            'cocktail_name': cocktail_name,
+            'user': user,
+            'status': 'started'
+        })
+
         self.status = f"Making cocktail for {user}"
         self.current_task = "Cocktail"
+
         for cocktail in self.selected_cocktails:
             if cocktail_name.lower() == cocktail.name.lower():
                 print(f"\nPreparing {cocktail.name}!\n")
+
+                # Publish initial status
+                self.mqtt_client.publish('cocktail_status', {
+                    'cocktail_name': cocktail_name,
+                    'user': user,
+                    'status': 'preparing',
+                })
+
                 ingredients_to_cool = []
                 optimal_temps = []
 
@@ -191,10 +206,26 @@ class Smartender:
                             required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
                             optimal_temp = details['optimal_temp_C']
 
+                            # Publish pump status
+                            self.mqtt_client.publish('pump_status', {
+                                'pump_id': pump.id,
+                                'ingredient': pump.ingredient,
+                                'temperature': pump.temperature_sensor.read_temperature(pump.last_refill_time),
+                                'remaining_quantity': pump.float_switch.left_quantity
+                            })
+
                             # Check and refill if needed
                             if pump.float_switch.left_quantity < required_qty_percent:
                                 print(f"Refilling {ingredient}...")
                                 pump.refill()
+
+                                # Publish refill status
+                                self.mqtt_client.publish('cocktail_status', {
+                                    'cocktail_name': cocktail_name,
+                                    'user': user,
+                                    'status': 'refilling',
+                                    'ingredient': ingredient,
+                                })
 
                             # Check temperature
                             current_temp = pump.temperature_sensor.read_temperature(pump.last_refill_time)
@@ -204,6 +235,11 @@ class Smartender:
 
                 # Handle temperature requirements
                 if ingredients_to_cool:
+                    self.mqtt_client.publish('cocktail_status', {
+                        'cocktail_name': cocktail_name,
+                        'user': user,
+                        'status': 'cooling',
+                    })
                     self.wait_for_ingredients(ingredients_to_cool, optimal_temps)
                     return
 
@@ -214,7 +250,22 @@ class Smartender:
                             required_ml = details['quantity']
                             optimal_temp = details['optimal_temp_C']
                             required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
+
+                            # Publish dispensing status
+                            self.mqtt_client.publish('cocktail_status', {
+                                'cocktail_name': cocktail_name,
+                                'user': user,
+                                'status': f'dispensing {ingredient}',
+                            })
+
                             pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
+
+                # Cocktail complete
+                self.mqtt_client.publish('cocktail_status', {
+                    'cocktail_name': cocktail_name,
+                    'user': user,
+                    'status': 'completed'
+                })
 
                 print("Your cocktail is ready. Enjoy!\n")
                 self.status = "Idle"

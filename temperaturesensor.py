@@ -1,9 +1,10 @@
 import random
 from datetime import datetime, timedelta
 
+
 class TemperatureSensor:
     """Simulates a temperature sensor."""
-    
+
     def __init__(self, initial_temperature=None):
         self.temperature = initial_temperature
 

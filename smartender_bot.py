@@ -2,6 +2,7 @@ import json
 import telepot
 from telepot.loop import MessageLoop
 from telepot.namedtuple import InlineKeyboardMarkup, InlineKeyboardButton
+import threading
 
 
 class SmartenderBot:
@@ -10,6 +11,7 @@ class SmartenderBot:
         self.token = token
         self.smartender = smartender
         self.bot = None
+        self.message_loop_thread = None
 
     def start(self):
         """Initialize and start the bot."""
@@ -17,10 +19,8 @@ class SmartenderBot:
             self.bot = telepot.Bot(self.token)
 
             # Set up message handlers
-            MessageLoop(self.bot, {
-                'chat': self.handle_message,
-                'callback_query': self.handle_callback_query
-            }).run_as_thread()
+            self.message_loop_thread = threading.Thread(target=self.run_message_loop)
+            self.message_loop_thread.start()
 
             print("Telegram bot initialized successfully!")
             print("Bot username:", self.bot.getMe()['username'])
@@ -28,6 +28,13 @@ class SmartenderBot:
         except Exception as e:
             print(f"Error initializing Telegram bot: {e}")
             self.bot = None
+
+    def run_message_loop(self):
+        """Run the message loop in a separate thread."""
+        MessageLoop(self.bot, {
+            'chat': self.handle_message,
+            'callback_query': self.handle_callback_query
+        }).run_as_thread()
 
     def handle_message(self, msg):
         """Handle incoming Telegram messages."""
@@ -54,17 +61,39 @@ class SmartenderBot:
         """Handle callback queries from inline keyboard buttons."""
         query_id, chat_id, query_data = telepot.glance(msg, flavor='callback_query')
         user_name = msg['from']['username']
+
         # Print the callback query to the terminal
         print(f"Received callback query from {user_name}, chat {chat_id}: {query_data}")
 
-        # Make the selected cocktail
-        self.bot.answerCallbackQuery(query_id, text=f"Starting to prepare {query_data}!")
-        self.bot.sendMessage(chat_id, f"Preparing your {query_data}... Please wait!")
+        # Prepare the cocktail
         try:
+            # Confirm cocktail order
+            self.bot.answerCallbackQuery(query_id, text=f"Starting to prepare {query_data}!")
+            self.bot.sendMessage(chat_id, f"🍸 Preparing your {query_data}... Please wait!")
+
+            # Store chat_id for potential future reference
+            cocktail_order = {
+                'cocktail_name': query_data,
+                'user': user_name,
+                'chat_id': chat_id
+            }
+            # Publish cocktail order to MQTT
+            self.smartender.mqtt_client.publish('cocktail_order', cocktail_order)
+
+            # Attempt to make the cocktail
             self.smartender.make_cocktail(query_data, user_name)
-            self.bot.sendMessage(chat_id, f"✨ Your {query_data} is ready! Enjoy! 🍸")
+
         except Exception as e:
-            self.bot.sendMessage(chat_id, f"Sorry, there was an error preparing your cocktail: {str(e)}")
+            error_message = f"Sorry, there was an error preparing your cocktail: {str(e)}"
+            self.bot.sendMessage(chat_id, error_message)
+
+            # Publish error status
+            self.smartender.mqtt_client.publish('cocktail_status', {
+                'cocktail_name': query_data,
+                'user': user_name,
+                'status': 'error',
+                'error_message': str(e)
+            })
 
     def send_welcome_message(self, chat_id, username):
         """Send welcome message to new users."""
@@ -133,3 +162,11 @@ class SmartenderBot:
                 chat_id,
                 "Sorry, there was an error loading the cocktail menu. Please try again later."
             )
+
+    def stop(self):
+        """Gracefully stop the bot and message loop."""
+        if self.bot:
+            print("Stopping the bot...")
+            # Stop the message loop and cleanup any resources
+            self.bot.MessageLoop__thread.stop()
+            print("Bot stopped gracefully.")
