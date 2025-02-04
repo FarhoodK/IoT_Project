@@ -3,9 +3,10 @@ from tqdm import tqdm
 import time
 from datetime import datetime
 
+
 class Pump:
-    def __init__(self, id, ingredient, temperature, maintenance, cocktails, 
-                temperature_sensor, float_switch, last_refill_time, mqtt_client):
+    def __init__(self, id, ingredient, temperature, maintenance, cocktails,
+                 temperature_sensor, float_switch, last_refill_time, mqtt_client):
         self.id = id
         self.ingredient = ingredient
         self.temperature = temperature
@@ -18,9 +19,7 @@ class Pump:
 
     def wait_for_optimal_temperature(self, optimal_temp):
         current_temp = self.temperature_sensor.read_temperature(self.last_refill_time)
-        if current_temp > optimal_temp:
-            return False
-        return True
+        return current_temp <= optimal_temp
 
     def display_status(self):
         temp = self.temperature_sensor.read_temperature(self.last_refill_time)
@@ -43,12 +42,12 @@ class Pump:
         steps = 100
         step_time = refill_duration / steps
 
-        for _ in tqdm(range(steps), desc=f"Refilling {self.ingredient}", unit="step"):
+        for _ in tqdm(range(steps), desc=f"Refilling {self.ingredient}", unit="step", ncols=80, leave=False):
             time.sleep(step_time)
 
         self.float_switch.left_quantity = 100
         self.last_refill_time = datetime.now()
-        
+
         status_msg = {
             'Pump_Number': self.id,
             "Ingredient": self.ingredient,
@@ -69,23 +68,42 @@ class Pump:
             if not self.wait_for_optimal_temperature(optimal_temp):
                 return
 
-        flow_rate = 600
+        flow_rate = 600  # ml per minute
         total_time_seconds = (ml / flow_rate) * 60
         steps = 100
         step_time = total_time_seconds / steps
 
-        for _ in tqdm(range(steps), desc=f"Dispensing {ingredient}", unit="step"):
-            time.sleep(step_time)
+        tqdm.write(f"\nStarting dispensing process for {ingredient} ({ml} ml)...")
 
-        remaining = self.float_switch.read_quantity(ml)
+        # Create the progress bar and keep it in place after it finishes
+        with tqdm(total=steps, desc=f"Dispensing {ingredient}", unit="step", ncols=80, dynamic_ncols=True,
+                  leave=True) as pbar:
+            for _ in range(steps):
+                time.sleep(step_time)
+                pbar.update(1)
+
+        # Once it's finished, the progress bar will stay at 100%
+        tqdm.write(f"Finished dispensing {ml} ml of {ingredient}. Remaining: {self.float_switch.read_quantity(ml)} ml")
+
+        # Optional: Add space after the progress bar to prevent it from being overwritten too quickly
+        print("\n" * 1)  # Adds one blank line to separate the next progress bar
+
+        # Update status via MQTT
+        current_temp = self.temperature_sensor.read_temperature(self.last_refill_time)
         status_msg = {
             'Pump_Number': self.id,
             "Ingredient": self.ingredient,
             "Action": "Dispense",
             "Dispensed_ml": ml,
-            "Remaining_Quantity": remaining,
-            "Current_Temperature": self.temperature_sensor.read_temperature(self.last_refill_time),
+            "Remaining_Quantity": self.float_switch.read_quantity(ml),
+            "Current_Temperature": current_temp,
             "timestamp": datetime.now().isoformat(),
             "type": "dispense"
         }
         self.mqtt_client.publish(status_msg)
+
+        # Proceed to the next ingredient (after a slight pause)
+        print("\n")
+
+
+

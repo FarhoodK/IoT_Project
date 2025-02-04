@@ -8,16 +8,17 @@ from temperaturesensor import TemperatureSensor
 from publisher import MqttClient
 from datetime import datetime
 from tqdm import tqdm
+from smartender_bot import SmartenderBot
 
 
 class Smartender:
     """Main class to handle the Smartender operations."""
 
-    def __init__(self, filename1):
+    def __init__(self, filename, bot_token):
         """
         Initialize Smartender with a JSON file containing cocktail data.
         """
-        self.filename1 = filename1
+        self.filename1 = filename
         self.available_cocktails = []
         self.selected_cocktails = []
         self.selected_ingredients = []
@@ -27,6 +28,7 @@ class Smartender:
         self.data = {"selected_cocktails": []}
         self.status = "Idle"
         self.current_task = None
+        self.bot_token = bot_token
 
         # Initialize MQTT client
         self.mqtt_client = MqttClient(
@@ -35,6 +37,9 @@ class Smartender:
         )
         self.mqtt_client.connect()
 
+        # Initialize Telegram Bot
+        self.telegram_bot = SmartenderBot(self.bot_token, self)
+        self.telegram_bot.start()
         self.load_cocktails()
 
     def load_cocktails(self):
@@ -54,6 +59,7 @@ class Smartender:
         for cocktail in self.available_cocktails:
             if cocktail.name == cocktail_name:
                 self.data["selected_cocktails"].append(cocktail.to_dict())
+                print(self.selected_cocktails)
                 break
 
     def selected_to_json(self):
@@ -136,44 +142,60 @@ class Smartender:
                 if cocktail_name not in pump.cocktails:
                     pump.cocktails.append(cocktail_name)
 
-    def cooling_progress_bar(self, total_time):
+    def cooling_progress_bar(self, total_time, cooling_percentage=100):
         """Show a progress bar to simulate ingredients cooling waiting time."""
         self.cooling_event.clear()
-        with tqdm(total=total_time, desc="Cooling Ingredients",
-                  bar_format="{l_bar}{bar} [time left: {remaining}]") as pbar:
+        with tqdm(total=total_time, desc="Cooling Ingredients", bar_format="{l_bar}{bar} [time left: {remaining}]") as pbar:
+            # Update progress every second based on cooling steps
             while not self.cooling_event.is_set() and pbar.n < total_time:
-                time.sleep(1)
-                pbar.update(1)
+                time.sleep(total_time / cooling_percentage)  # Control update speed (based on cooling percentage)
+                pbar.update(1)  # Move progress bar step by step
 
     def wait_for_ingredients(self, pumps, optimal_temps):
-        """Wait until all ingredients are at their optimal temperature."""
-        total_cooling_time = 10  # 10 seconds cooling time
+        """Wait until all ingredients are at their optimal temperature asynchronously."""
+
+        # Identify which ingredients actually need cooling
+        ingredients_to_cool = [
+            (pump, optimal_temp) for pump, optimal_temp in zip(pumps, optimal_temps)
+            if pump.temperature_sensor.read_temperature(pump.last_refill_time) > optimal_temp
+        ]
+
+        # If no ingredients require cooling, return immediately
+        if not ingredients_to_cool:
+            print("All ingredients are already at optimal temperature.")
+            return
+
+        total_cooling_time = 10  # Simulated cooling time in seconds
+        cooling_percentage = 20  # Assuming cooling is divided into 5 phases
+
+        # Start the cooling progress bar in a separate thread if it's not already running
+        if not self.cooling_thread or not self.cooling_thread.is_alive():
+            self.cooling_thread = threading.Thread(
+                target=self.cooling_progress_bar, args=(total_cooling_time, cooling_percentage)
+            )
+            self.cooling_thread.start()
+
+        # Continuously check ingredient temperatures and update progress bar
         while True:
+            # Check whether all ingredients have cooled down to optimal temperature
             all_optimal = all(
                 pump.temperature_sensor.read_temperature(pump.last_refill_time) <= optimal_temp
-                for pump, optimal_temp in zip(pumps, optimal_temps)
+                for pump, optimal_temp in ingredients_to_cool
             )
 
             if all_optimal:
                 print("All ingredients have reached their optimal temperatures.")
-                return
+                self.cooling_event.set()  # Stop progress bar
+                break  # Exit the loop
 
-            print("Some ingredients are still above optimal temperatures. Please wait or choose another cocktail.")
-            if not self.cooling_thread or not self.cooling_thread.is_alive():
-                self.cooling_thread = threading.Thread(
-                    target=self.cooling_progress_bar,
-                    args=(total_cooling_time,)
-                )
-                self.cooling_thread.start()
+            time.sleep(1)  # Avoid high CPU usage
 
-            user_input = self.get_user_input("Press 'b' to choose another cocktail: ")
-            if user_input.lower() == 'b':
-                self.cooling_event.set()
-                self.cooling_thread.join()
-                return
-
-    def make_cocktail(self, cocktail_name=None, user="UNKNOWN"):
+    def make_cocktail(self, cocktail_name=None, user="UNKNOWN", chat_id=None):
         """Prepare the selected cocktail with MQTT status updates."""
+
+        print(f"\nDEBUG: Attempting to make {cocktail_name} for {user}")
+        print(f"DEBUG: Selected Cocktails: {[c.name for c in self.selected_cocktails]}")
+
         # Publish cocktail order start
         self.mqtt_client.publish('cocktail_order', {
             'cocktail_name': cocktail_name,
@@ -184,90 +206,107 @@ class Smartender:
         self.status = f"Making cocktail for {user}"
         self.current_task = "Cocktail"
 
-        for cocktail in self.selected_cocktails:
-            if cocktail_name.lower() == cocktail.name.lower():
-                print(f"\nPreparing {cocktail.name}!\n")
+        if len(self.selected_cocktails) > 0:
+            for cocktail in self.selected_cocktails:
+                if cocktail_name.lower() == cocktail.name.lower():
+                    print(f"\nPreparing {cocktail.name}!\n")
 
-                # Publish initial status
-                self.mqtt_client.publish('cocktail_status', {
-                    'cocktail_name': cocktail_name,
-                    'user': user,
-                    'status': 'preparing',
-                })
-
-                ingredients_to_cool = []
-                optimal_temps = []
-
-                # First pass: Check quantities and temperatures
-                for ingredient, details in cocktail.ingredients.items():
-                    for pump in self.active_pumps:
-                        if pump.ingredient == ingredient:
-                            required_ml = details['quantity']
-                            required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
-                            optimal_temp = details['optimal_temp_C']
-
-                            # Publish pump status
-                            self.mqtt_client.publish('pump_status', {
-                                'pump_id': pump.id,
-                                'ingredient': pump.ingredient,
-                                'temperature': pump.temperature_sensor.read_temperature(pump.last_refill_time),
-                                'remaining_quantity': pump.float_switch.left_quantity
-                            })
-
-                            # Check and refill if needed
-                            if pump.float_switch.left_quantity < required_qty_percent:
-                                print(f"Refilling {ingredient}...")
-                                pump.refill()
-
-                                # Publish refill status
-                                self.mqtt_client.publish('cocktail_status', {
-                                    'cocktail_name': cocktail_name,
-                                    'user': user,
-                                    'status': 'refilling',
-                                    'ingredient': ingredient,
-                                })
-
-                            # Check temperature
-                            current_temp = pump.temperature_sensor.read_temperature(pump.last_refill_time)
-                            if current_temp > optimal_temp:
-                                ingredients_to_cool.append(pump)
-                                optimal_temps.append(optimal_temp)
-
-                # Handle temperature requirements
-                if ingredients_to_cool:
+                    # Publish initial status
                     self.mqtt_client.publish('cocktail_status', {
                         'cocktail_name': cocktail_name,
                         'user': user,
-                        'status': 'cooling',
+                        'status': 'preparing',
                     })
-                    self.wait_for_ingredients(ingredients_to_cool, optimal_temps)
-                    return
+
+                    ingredients_to_cool = []
+                    optimal_temps = []
+
+                    # First pass: Check quantities and temperatures
+                    for ingredient, details in cocktail.ingredients.items():
+                        for pump in self.active_pumps:
+                            if pump.ingredient == ingredient:
+                                required_ml = details['quantity']
+                                required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
+                                optimal_temp = details['optimal_temp_C']
+
+                                # Debugging: Print pump details
+                                print(f"DEBUG: Checking pump {pump.id} ({pump.ingredient})")
+                                print(f"DEBUG: Required: {required_ml} ml, Available: {pump.float_switch.left_quantity} ml")
+
+                                # Publish pump status
+                                self.mqtt_client.publish('pump_status', {
+                                    'pump_id': pump.id,
+                                    'ingredient': pump.ingredient,
+                                    'temperature': pump.temperature_sensor.read_temperature(pump.last_refill_time),
+                                    'remaining_quantity': pump.float_switch.left_quantity
+                                })
+
+                                # Check and refill if needed
+                                if pump.float_switch.left_quantity < required_qty_percent:
+                                    print(f"Refilling {ingredient}...")
+                                    pump.refill()
+
+                                    # Publish refill status
+                                    self.mqtt_client.publish('cocktail_status', {
+                                        'cocktail_name': cocktail_name,
+                                        'user': user,
+                                        'status': 'refilling',
+                                        'ingredient': ingredient,
+                                    })
+
+                                # Check temperature
+                                current_temp = pump.temperature_sensor.read_temperature(pump.last_refill_time)
+                                print(f"DEBUG: {ingredient} current temp: {current_temp}, optimal: {optimal_temp}")
+
+                                if current_temp > optimal_temp:
+                                    ingredients_to_cool.append(pump)
+                                    optimal_temps.append(optimal_temp)
+
+                    # Handle temperature requirements
+                    if ingredients_to_cool:
+                        print(f"DEBUG: Cooling required for {[p.ingredient for p in ingredients_to_cool]}")
+                        self.mqtt_client.publish('cocktail_status', {
+                            'cocktail_name': cocktail_name,
+                            'user': user,
+                            'status': 'cooling',
+                        })
+                        self.wait_for_ingredients(ingredients_to_cool, optimal_temps)
 
                 # Second pass: Actual dispensing
-                for ingredient, details in cocktail.ingredients.items():
-                    for pump in self.active_pumps:
-                        if pump.ingredient == ingredient:
-                            required_ml = details['quantity']
-                            optimal_temp = details['optimal_temp_C']
-                            required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
+                    print("\nDEBUG: Starting dispensing process...\n")
+                    for ingredient, details in cocktail.ingredients.items():
+                        for pump in self.active_pumps:
+                            if pump.ingredient == ingredient:
+                                required_ml = details['quantity']
+                                optimal_temp = details['optimal_temp_C']
+                                required_qty_percent = ((required_ml / 10) / pump.float_switch.quantity) * 100
 
-                            # Publish dispensing status
-                            self.mqtt_client.publish('cocktail_status', {
-                                'cocktail_name': cocktail_name,
-                                'user': user,
-                                'status': f'dispensing {ingredient}',
-                            })
+                                print(f"DEBUG: Dispensing {ingredient} - {required_ml} ml")
 
-                            pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
+                                # Publish dispensing status
+                                self.mqtt_client.publish('cocktail_status', {
+                                    'cocktail_name': cocktail_name,
+                                    'user': user,
+                                    'status': f'dispensing {ingredient}',
+                                })
 
-                # Cocktail complete
-                self.mqtt_client.publish('cocktail_status', {
-                    'cocktail_name': cocktail_name,
-                    'user': user,
-                    'status': 'completed'
-                })
+                                pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
 
-                print("Your cocktail is ready. Enjoy!\n")
-                self.status = "Idle"
-                self.current_task = None
-                return
+                    # Cocktail complete
+                    self.mqtt_client.publish('cocktail_status', {
+                        'cocktail_name': cocktail_name,
+                        'user': user,
+                        'status': 'completed'
+                    })
+
+                    self.telegram_bot.bot.sendMessage(chat_id, f"🍸 Your {cocktail_name} is ready. Enjoy!")
+                    self.status = "Idle"
+                    self.current_task = None
+                    return
+
+            self.telegram_bot.bot.sendMessage(chat_id, f"{cocktail_name} not in menu. Pick another cocktail.")
+            print(f"ERROR: {cocktail_name} not found in selected cocktails.")
+
+        else:
+            self.telegram_bot.bot.sendMessage(chat_id, f"{cocktail_name} not in menu. Pick another cocktail.")
+            print(f"ERROR: Empty cocktail list. Configure Smartender")

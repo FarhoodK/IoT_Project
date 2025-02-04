@@ -3,6 +3,7 @@ import telepot
 from telepot.loop import MessageLoop
 from telepot.namedtuple import InlineKeyboardMarkup, InlineKeyboardButton
 import threading
+import os
 
 
 class SmartenderBot:
@@ -40,49 +41,55 @@ class SmartenderBot:
         """Handle incoming Telegram messages."""
         content_type, chat_type, chat_id = telepot.glance(msg)
 
-        # Get the username, if available
-        user_username = msg['from'].get('username', 'No Username')
+        # Get the username, if available, otherwise use chat_id
+        user_username = msg['from'].get('username', None)
+        if not user_username:
+            user_username = f"User-{chat_id}"  # You can use chat_id to create a fallback name if no username is set
 
         if content_type == 'text':
             command = msg['text'].lower()
 
             if command == '/start':
                 self.send_welcome_message(chat_id, user_username)
-                self.send_cocktail_menu(chat_id, user_username)
-                print(f"{user_username} - {command}")
+                self.send_cocktail_menu(chat_id)
+                print(f"{user_username} ({chat_id}) - {command}")
             elif command == '/help':
                 self.send_help_message(chat_id, user_username)
-                print(f"{user_username} - {command}")
+                print(f"{user_username} ({chat_id}) - {command}")
             elif command == '/menu':
-                self.send_cocktail_menu(chat_id, user_username)
-                print(f"{user_username} - {command}")
+                self.send_cocktail_menu(chat_id)
+                print(f"{user_username} ({chat_id}) - {command}")
 
     def handle_callback_query(self, msg):
         """Handle callback queries from inline keyboard buttons."""
         query_id, chat_id, query_data = telepot.glance(msg, flavor='callback_query')
-        user_name = msg['from']['username']
+        user_username = msg['from'].get('username', None)
+        if not user_username:
+            user_username = f"User-{chat_id}"
 
         # Print the callback query to the terminal
-        print(f"Received callback query from {user_name}, chat {chat_id}: {query_data}")
+        print(f"Received callback query from {user_username}, chat {chat_id}: {query_data}")
 
         # Prepare the cocktail
         try:
             # Confirm cocktail order
-            self.bot.answerCallbackQuery(query_id, text=f"Starting to prepare {query_data}!")
-            self.bot.sendMessage(chat_id, f"🍸 Preparing your {query_data}... Please wait!")
+            if any(query_data.lower() == cocktail.name.lower() for cocktail in self.smartender.selected_cocktails):
+                self.bot.answerCallbackQuery(query_id, text=f"Starting to prepare {query_data}!")
+                self.bot.sendMessage(chat_id, f"🍸 Preparing your {query_data}... Please wait!")
 
-            # Store chat_id for potential future reference
-            cocktail_order = {
-                'cocktail_name': query_data,
-                'user': user_name,
-                'chat_id': chat_id
-            }
-            # Publish cocktail order to MQTT
-            self.smartender.mqtt_client.publish('cocktail_order', cocktail_order)
+                # Store chat_id for potential future reference
+                cocktail_order = {
+                    'cocktail_name': query_data,
+                    'user': user_username,
+                    'chat_id': chat_id
+                }
+                # Publish cocktail order to MQTT
+                self.smartender.mqtt_client.publish('cocktail_order', cocktail_order)
 
-            # Attempt to make the cocktail
-            self.smartender.make_cocktail(query_data, user_name)
-
+                # Attempt to make the cocktail
+                self.smartender.make_cocktail(query_data, user_username, chat_id)
+            else:
+                self.bot.sendMessage(chat_id, f"{query_data} not in menu. Pick another cocktail.")
         except Exception as e:
             error_message = f"Sorry, there was an error preparing your cocktail: {str(e)}"
             self.bot.sendMessage(chat_id, error_message)
@@ -90,7 +97,7 @@ class SmartenderBot:
             # Publish error status
             self.smartender.mqtt_client.publish('cocktail_status', {
                 'cocktail_name': query_data,
-                'user': user_name,
+                'user': user_username,
                 'status': 'error',
                 'error_message': str(e)
             })
@@ -115,52 +122,69 @@ class SmartenderBot:
         )
         self.bot.sendMessage(chat_id, help_text)
 
-    def send_cocktail_menu(self, chat_id, username):
+    def send_cocktail_menu(self, chat_id):
         """Send the cocktail selection menu with inline buttons, including ingredients."""
         try:
+            # Check if the file exists before attempting to open
+            if not os.path.exists('selected_cocktails.json'):
+                raise FileNotFoundError("Cocktail menu file not found.")
+
             with open('selected_cocktails.json', 'r') as file:
                 data = json.load(file)
-                cocktails = data['selected_cocktails']
 
-                # Initialize a message to hold all the cocktail names and ingredients
-                message_text = "🍹 Available cocktails:\n\n"
-                keyboard = []
+            cocktails = data.get('selected_cocktails', [])
 
-                for idx, cocktail in enumerate(cocktails, 1):
-                    # Get the cocktail's name and ingredients
-                    cocktail_name = cocktail['name']
-                    ingredients = cocktail.get('ingredients', [])
+            # Handle case where no cocktails are available
+            if not cocktails:
+                raise ValueError("No cocktails available in the menu.")
 
-                    # Format the ingredients list
-                    if ingredients:
-                        ingredients_text = ' ▾ '.join(ingredients)
-                    else:
-                        ingredients_text = 'No ingredients listed.'
+            # Initialize a message to hold all the cocktail names and ingredients
+            message_text = "🍹 Available cocktails:\n\n"
+            keyboard = []
 
-                    # Create the clickable button for the cocktail name
-                    cocktail_button = InlineKeyboardButton(
-                        text=cocktail_name,  # Cocktail name button
-                        callback_data=cocktail_name  # Callback for selecting the cocktail
-                    )
+            for idx, cocktail in enumerate(cocktails, 1):
+                cocktail_name = cocktail.get('name', 'Unknown Cocktail')
+                ingredients = cocktail.get('ingredients', [])
 
-                    # Add the cocktail name and ingredients to the message
-                    message_text += f"🔸 {cocktail_name}:\n{ingredients_text}\n\n"
+                # Format the ingredients list
+                ingredients_text = ' ▾ '.join(ingredients) if ingredients else 'No ingredients listed.'
 
-                    # Add the button for selecting the cocktail (if needed)
-                    keyboard.append([cocktail_button])
-
-                # Send the message with all cocktail names and ingredients
-                markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-                self.bot.sendMessage(
-                    chat_id,
-                    message_text,
-                    reply_markup=markup
+                # Create a button for the cocktail
+                cocktail_button = InlineKeyboardButton(
+                    text=cocktail_name,
+                    callback_data=cocktail_name
                 )
 
-        except Exception as e:
+                # Append cocktail details to the message
+                message_text += f"🔸 {cocktail_name}:\n{ingredients_text}\n\n"
+
+                # Add the button to the keyboard
+                keyboard.append([cocktail_button])
+
+            # Send the message with all cocktail names and ingredients
+            markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+            self.bot.sendMessage(chat_id, message_text, reply_markup=markup)
+
+        except FileNotFoundError:
             self.bot.sendMessage(
                 chat_id,
-                "Sorry, there was an error loading the cocktail menu. Please try again later."
+                "❌ The cocktail menu is not available. Please add some cocktails first!"
+            )
+        except json.JSONDecodeError:
+            self.bot.sendMessage(
+                chat_id,
+                "⚠️ There was an error reading the menu file. It might be corrupted."
+            )
+        except ValueError as e:
+            self.bot.sendMessage(
+                chat_id,
+                f"⚠️ {str(e)}"
+            )
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            self.bot.sendMessage(
+                chat_id,
+                "⚠️ An unexpected error occurred while loading the cocktail menu."
             )
 
     def stop(self):

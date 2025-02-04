@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
 from smartender import Smartender
-from smartender_bot import SmartenderBot
 from publisher import MqttClient
-import time
 
 # Initialize session state components
 if "smartender" not in st.session_state:
-    st.session_state.smartender = Smartender("cocktails.json")
+    st.session_state.smartender = Smartender("cocktails.json", "6401650950:AAFFt3FyX0mWb4RURHIMTed2Mkv5d3uMK1g")
 if "selected_cocktails" not in st.session_state:
     st.session_state.selected_cocktails = []
 if "mqtt_messages" not in st.session_state:
@@ -27,19 +25,7 @@ if "mqtt_subscriber" not in st.session_state:
 cocktail_status_placeholder = st.empty()
 pump_status_placeholder = st.empty()
 
-# Initialize SmartenderBot if not initialized already
-if "smartender_bot" not in st.session_state:
-    st.session_state.smartender_bot = SmartenderBot(
-        "6401650950:AAEZq16vHRDu9sQyFYKUqfhWFH1LZtDKHZA", st.session_state.smartender
-    )
-
-# Start the bot only once using a session state flag
-if "bot_started" not in st.session_state or not st.session_state.bot_started:
-    st.session_state.smartender_bot.start()
-    st.session_state.bot_started = True
-
 smartender = st.session_state.smartender
-smartender_bot = st.session_state.smartender_bot
 
 # Sidebar menu
 menu = st.sidebar.selectbox("Menu", [

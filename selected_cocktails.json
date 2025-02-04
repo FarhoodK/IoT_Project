@@ -1,0 +1,74 @@
+{
+    "selected_cocktails": [
+        {
+            "name": "Gin and Tonic",
+            "ingredients": {
+                "Gin": {
+                    "quantity": 50,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                },
+                "Tonic Water": {
+                    "quantity": 100,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                }
+            }
+        },
+        {
+            "name": "Daiquiri",
+            "ingredients": {
+                "Rum": {
+                    "quantity": 50,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                },
+                "Lime Juice": {
+                    "quantity": 15,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                },
+                "Simple Syrup": {
+                    "quantity": 10,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                }
+            }
+        },
+        {
+            "name": "Martini",
+            "ingredients": {
+                "Gin or Vodka": {
+                    "quantity": 50,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                },
+                "Dry Vermouth": {
+                    "quantity": 10,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                }
+            }
+        },
+        {
+            "name": "Whiskey Sour",
+            "ingredients": {
+                "Whiskey": {
+                    "quantity": 50,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                },
+                "Lemon Juice": {
+                    "quantity": 15,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                },
+                "Simple Syrup": {
+                    "quantity": 10,
+                    "temperature": "cold",
+                    "optimal_temp_C": 4
+                }
+            }
+        }
+    ]
+}
