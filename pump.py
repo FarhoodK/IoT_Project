@@ -6,7 +6,7 @@ from datetime import datetime
 
 class Pump:
     def __init__(self, id, ingredient, temperature, maintenance, cocktails,
-                 temperature_sensor, float_switch, last_refill_time, mqtt_client):
+                 temperature_sensor, float_switch, last_refill_time):
         self.id = id
         self.ingredient = ingredient
         self.temperature = temperature
@@ -15,7 +15,6 @@ class Pump:
         self.temperature_sensor = temperature_sensor
         self.float_switch = float_switch
         self.last_refill_time = last_refill_time
-        self.mqtt_client = mqtt_client
 
     def wait_for_optimal_temperature(self, optimal_temp):
         current_temp = self.temperature_sensor.read_temperature(self.last_refill_time)
@@ -100,8 +99,6 @@ class Pump:
             "timestamp": datetime.now().isoformat(),
             "type": "dispense"
         }
-        self.mqtt_client.publish(status_msg)
-
         # Proceed to the next ingredient (after a slight pause)
         print("\n")
 
