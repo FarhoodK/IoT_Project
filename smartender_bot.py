@@ -97,7 +97,6 @@ class SmartenderBot:
 
         if content_type == 'text':
             command = msg['text'].lower()
-
             if command == '/start':
                 self.send_welcome_message(chat_id, user_username)
                 self.send_cocktail_menu(chat_id)
@@ -216,11 +215,11 @@ class SmartenderBot:
 
     def send_queue_position(self, chat_id, position):
         if position > 3:
-            self.bot.sendMessage(chat_id, f"Your order is #{position} in the queue.")
+            self.bot.sendMessage(chat_id, f"➡️ Your order is #{position} in the queue.")
         elif position > 1 and position <= 3:
-            self.bot.sendMessage(chat_id, f"Your order is #{position} in the queue! Get ready to collect it")
+            self.bot.sendMessage(chat_id, f"➡️ Your order is #{position} in the queue! Get ready to collect it")
         elif position == 1:
-            self.bot.sendMessage(chat_id, f"Your order is next in line!")
+            self.bot.sendMessage(chat_id, f"➡️ Your order is next in line!")
                              
     def send_order_confirmation(self, chat_id, cocktail_name):
         self.bot.sendMessage(chat_id, f"🍹 Your {cocktail_name} is being prepared. Please wait a moment...")

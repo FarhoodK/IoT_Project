@@ -1,4 +1,3 @@
-import json
 from tqdm import tqdm
 import time
 from datetime import datetime
@@ -21,19 +20,17 @@ class Pump:
         return current_temp <= optimal_temp
 
     def display_status(self):
-        temp = self.temperature_sensor.read_temperature(self.last_refill_time)
-        quantity = self.float_switch.left_quantity
         status_msg = {
             "Pump_Number": self.id,
             "Ingredient": self.ingredient,
-            "Current_Temperature": temp,
-            "Remaining_Quantity": round(quantity, 2),
+            "Current_Temperature": self.temperature_sensor.read_temperature(self.last_refill_time),
+            "Remaining_Quantity": round(self.float_switch.left_quantity, 2),
             "Maintenance_Needed": self.float_switch.maintenance,
             "Configured_for": self.cocktails,
-            "timestamp": datetime.now().isoformat(),
-            "type": "status"
+            "timestamp": datetime.now().isoformat()
         }
-        self.mqtt_client.publish(status_msg)
+        return status_msg
+        
 
     def refill(self):
         self.float_switch.left_quantity = 0
@@ -48,7 +45,7 @@ class Pump:
         self.last_refill_time = datetime.now()
 
         status_msg = {
-            'Pump_Number': self.id,
+            "Pump_Number": self.id,
             "Ingredient": self.ingredient,
             "Action": "Refill",
             "New_Quantity": self.float_switch.left_quantity,
@@ -56,7 +53,7 @@ class Pump:
             "timestamp": datetime.now().isoformat(),
             "type": "refill"
         }
-        self.mqtt_client.publish(status_msg)
+        return status_msg
 
     def erogate(self, ingredient, ml, optimal_temp, required_qty_percent):
         if not self.wait_for_optimal_temperature(optimal_temp):
@@ -90,7 +87,7 @@ class Pump:
         # Update status via MQTT
         current_temp = self.temperature_sensor.read_temperature(self.last_refill_time)
         status_msg = {
-            'Pump_Number': self.id,
+            "Pump_Number": self.id,
             "Ingredient": self.ingredient,
             "Action": "Dispense",
             "Dispensed_ml": ml,
@@ -99,8 +96,6 @@ class Pump:
             "timestamp": datetime.now().isoformat(),
             "type": "dispense"
         }
-        # Proceed to the next ingredient (after a slight pause)
-        print("\n")
-
+        return status_msg
 
 

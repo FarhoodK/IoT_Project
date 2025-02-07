@@ -7,7 +7,7 @@ from smartender_core import Smartender
 logger = Logger("MAIN")
 
 def start_api_server(smartender):
-    """Start the CherryPy API server"""
+    # Start the CherryPy API server.
     try:
         logger.info("Starting the Smartender API server...")
         SmartenderAPI.run_server(smartender)
@@ -15,7 +15,7 @@ def start_api_server(smartender):
         logger.error(f"API server startup failed: {e}", exc_info=True)
 
 def start_streamlit_app():
-    """Start the Streamlit app"""
+    # Start the Streamlit app.
     try:
         logger.info("Starting the Streamlit app...")
         subprocess.Popen(["streamlit", "run", "streamlit.py"])
@@ -23,14 +23,15 @@ def start_streamlit_app():
         logger.error(f"Failed to start Streamlit app: {e}")
 
 def main():
-    """Main entry point to start the system"""
+    # Main entry point to start the system.
     try:
         try:
             logger.info("Initializing the Smartender system...")
             # Initialize Smartender instance
             cocktails_path = "cocktails.json"
             bot_token = "6401650950:AAFFt3FyX0mWb4RURHIMTed2Mkv5d3uMK1g"
-            smartender = Smartender(cocktails_path, bot_token)
+            mqtt_broker, mqtt_port, mqtt_topic = ("mqtt.eclipseprojects.io", 1883, "smartender")
+            smartender = Smartender(cocktails_path, bot_token, mqtt_broker, mqtt_port, mqtt_topic)
         
             # Start the Smartender system
             smartender.load_cocktails()

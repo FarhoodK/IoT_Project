@@ -1,7 +1,8 @@
 import os
-import threading
 import cherrypy
+import cherrypy._json
 from cherrypy_cors import install as install_cors
+from logger import Logger
 
 class SmartenderAPI:
     def __init__(self, smartender_instance):
@@ -54,79 +55,6 @@ class SmartenderAPI:
             self.logger.error(f"Error selecting cocktail: {e}")
             cherrypy.response.status = 500
             return {"error": str(e)}
-
-    @cherrypy.expose
-    @cherrypy.tools.json_in()
-    @cherrypy.tools.json_out()
-    def make_cocktail(self):
-        # Initiate cocktail preparation
-        data = cherrypy.request.json
-        cocktail_name = data.get('cocktail_name')
-        user = data.get('user', 'UNKNOWN')
-        
-        if not cocktail_name:
-            cherrypy.response.status = 400
-            return {"error": "Cocktail name is required"}
-        
-        try:
-            # Run cocktail preparation in a separate thread to prevent blocking
-            threading.Thread(
-                target=self.prepare_cocktail_in_background, 
-                args=(cocktail_name, user)
-            ).start()
-            return {
-                "status": f"Preparing {cocktail_name}",
-                "user": user
-            }
-        except Exception as e:
-            cherrypy.response.status = 500
-            return {"error": str(e)}
-
-    def prepare_cocktail_in_background(self, cocktail_name, user):
-        # Run cocktail preparation and notify user through the bot
-        try:
-            # Call Smartender to make the cocktail
-            self.smartender.make_cocktail(cocktail_name, user)
-            
-            # Notify user via the Telegram bot
-            self.smartender.telegram_bot.sendMessage(
-                user,
-                f"Your {cocktail_name} is ready! Enjoy your drink."
-            )
-        except Exception as e:
-            self.smartender.telegram_bot.sendMessage(
-                user,
-                f"Sorry, there was an error preparing your {cocktail_name}: {str(e)}"
-            )
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def status(self):
-        # Get current system status
-        return {
-            "status": self.smartender.status,
-            "current_task": self.smartender.current_task,
-            "active_pumps": [
-                {
-                    "id": pump.id, 
-                    "ingredient": pump.ingredient
-                } for pump in self.smartender.active_pumps
-            ]
-        }
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def pump_status(self):
-        # Get detailed pump status
-        return [
-            {
-                "id": pump.id,
-                "ingredient": pump.ingredient,
-                "temperature": pump.temperature_sensor.read_temperature(pump.last_refill_time),
-                "remaining_quantity": pump.float_switch.left_quantity,
-                "cocktails": pump.cocktails
-            } for pump in self.smartender.active_pumps
-        ]
     
     @cherrypy.expose
     @cherrypy.tools.json_out()

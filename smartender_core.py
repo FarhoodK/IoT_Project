@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from smartender_MQTT import MQTTClient
 from pump import Pump
 from cocktail import Cocktail
 from floatswitch import FloatSwitch
@@ -14,8 +15,15 @@ from logger import Logger
 class Smartender:
     # Main class to handle the Smartender operations.
 
-    def __init__(self, filename, bot_token):
+    def __init__(self, filename, bot_token, mqtt_broker, mqtt_port, topic):
         self.filename = filename
+        self.mqtt_broker = mqtt_broker
+        self.mqtt_port = mqtt_port
+        self.topic = topic
+        self.bot_token = bot_token
+        self.status = "Idle"
+        self.orders = Orders(self)
+        self.logger = Logger("SMARTENDER", self)
         self.available_cocktails = []
         self.selected_cocktails = []
         self.selected_ingredients = []
@@ -23,16 +31,13 @@ class Smartender:
         self.cooling_thread = None
         self.cooling_event = threading.Event()
         self.data = {"selected_cocktails": []}
-        self.status = "Idle"
         self.current_task = None
-        self.orders = Orders(self)
-        self.bot_token = bot_token
-        self.logger = Logger("SMARTENDER")
+        self.monitoring_thread = None
+        self.mqtt_client = MQTTClient(self.mqtt_broker, self.mqtt_port, self.topic)
 
     def start_telegram_bot(self):
         self.telegram_bot = SmartenderBot(self.bot_token, self)
         self.telegram_bot.start()
-        
 
     def load_cocktails(self):
         self.logger.info("Cocktails loaded from JSON")
@@ -52,9 +57,10 @@ class Smartender:
         # Save selected cocktails.
         for cocktail in self.available_cocktails:
             if cocktail.name == cocktail_name:
-                self.data["selected_cocktails"].append(cocktail.to_dict())
-                self.logger.info(f"{cocktail_name} added to selected cocktails")
-                break
+                if cocktail.name not in self.data["selected_cocktails"]:
+                    self.data["selected_cocktails"].append(cocktail.to_dict())
+                    self.logger.info(f"{cocktail_name} added to selected cocktails")
+                    break
 
     def selected_to_json(self):
         # Write selected cocktails to JSON for the Telegram Bot to read.
@@ -85,11 +91,6 @@ class Smartender:
         return  # Break after adding the cocktail to avoid duplicate additions
         #print(f"Error: Cocktail {cocktail_name} not found in available cocktails.")
 
-    def display_pump_status(self):
-        # Display status of all active pumps.
-        for pump in self.active_pumps:
-            pump.display_status()
-
     def show_cocktails(self, cocktails):
         # Display list of available cocktails.
         print("\nAvailable Cocktails:\n")
@@ -119,6 +120,9 @@ class Smartender:
                     self.update_pump_cocktails(ingredient, cocktail.name)
         self.logger.info("Pumps successfully configured!\n")
 
+        # Start the background recording thread once pumps are configured
+        self.start_pump_monitoring(interval=15)  # Record every 15 seconds
+
     def pump_exists(self, ingredient):
         # Check if a pump for the ingredient already exists.
         return any(pump.ingredient == ingredient for pump in self.active_pumps)
@@ -129,6 +133,39 @@ class Smartender:
             if pump.ingredient == ingredient:
                 if cocktail_name not in pump.cocktails:
                     pump.cocktails.append(cocktail_name)
+
+    def start_pump_monitoring(self, interval=60):
+        def record_periodically():
+            while True:
+                pump_values = {
+                    "temperature": [],
+                    "quantity": []
+                }
+
+                for pump in self.active_pumps:
+                    temperature = pump.temperature_sensor.read_temperature(pump.last_refill_time)
+                    quantity = pump.float_switch.left_quantity
+
+                    # Append the pump's id and its corresponding values
+                    pump_values["temperature"].append((f"pump_{pump.id}", temperature))
+                    pump_values["quantity"].append((f"pump_{pump.id}", quantity))
+
+                # Publish pump histories in the specified JSON structure
+                self.mqtt_client.publish("smartender/pump_monitoring", json.dumps(pump_values))
+
+                time.sleep(interval)
+
+        # Initialize and start the thread
+        self.monitoring_thread = threading.Thread(target=record_periodically)
+        self.monitoring_thread.daemon = True
+        self.monitoring_thread.start()
+
+    def get_pump_history(self, pump_id, data_type):
+        # Fetch historical data for a pump and a specific data type.
+        pump = next((p for p in self.active_pumps if p.id == pump_id), None)
+        if not pump:
+            return None  # Pump not found
+        return pump.get_history(data_type)
 
     def cooling_progress_bar(self, total_time, cooling_percentage=100):
         # Show a progress bar to simulate ingredients cooling waiting time.
@@ -196,6 +233,8 @@ class Smartender:
 
         self.status = f"Making cocktail for {user}"
         self.current_task = "Cocktail"
+        self.mqtt_client.publish("smartender/status", json.dumps({"status": self.status}))
+        self.logger.info(f"Published status: {self.status}")
 
         if len(self.selected_cocktails) > 0:
             for cocktail in self.selected_cocktails:
@@ -220,7 +259,8 @@ class Smartender:
                                 # Check and refill if needed
                                 if pump.float_switch.left_quantity < required_qty_percent:
                                     self.logger.info(f"Refilling {ingredient}...")
-                                    pump.refill()
+                                    msg = pump.refill()
+                                    self.mqtt_client.publish("smartender/pump_status", json.dumps(msg))
 
                                 # Check temperature
                                 current_temp = pump.temperature_sensor.read_temperature(pump.last_refill_time)
@@ -246,7 +286,8 @@ class Smartender:
 
                                 self.logger.info(f"Dispensing {ingredient} - {required_ml} ml")
 
-                                pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
+                                msg = pump.erogate(ingredient, required_ml, optimal_temp, required_qty_percent)
+                                self.mqtt_client.publish("smartender/pump_status", json.dumps(msg))
 
                     # Cocktail complete
                     self.telegram_bot.send_completion(chat_id, cocktail_name)

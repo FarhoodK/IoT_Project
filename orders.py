@@ -36,7 +36,7 @@ class Orders:
             with self.lock:
                 if self.order_queue and not self.processing:
                     self.processing = True
-                    order_id = self.order_queue[0]["id"]  # FIFO order
+                    order_id = self.order_queue[0]["id"]
                     cocktail_name = self.order_queue[0]["cocktail_name"]
                     chat_id = self.order_queue[0]["chat_id"]
                     self.smartender.telegram_bot.send_order_confirmation(chat_id, cocktail_name)

@@ -1,5 +1,5 @@
 class Cocktail:
-    """Represents a cocktail with its ingredients and preparation steps."""
+    # Represents a cocktail with its ingredients and preparation steps.
 
     def __init__(self, name, ingredients, steps):
         self.name = name
@@ -7,7 +7,7 @@ class Cocktail:
         self.steps = steps
 
     def show(self):
-        """Display cocktail details."""
+        # Display cocktail details.
         print(f"Cocktail: {self.name}")
         print("Ingredients:")
         for ingredient, details in self.ingredients.items():
@@ -15,7 +15,7 @@ class Cocktail:
         print()
 
     def to_dict(self):
-        """Convert the Cocktail object to a dictionary for JSON storage."""
+        # Convert the Cocktail object to a dictionary for JSON storage.
         return {
             "name": self.name,
             "ingredients": self.ingredients

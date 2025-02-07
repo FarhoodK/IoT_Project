@@ -16,52 +16,22 @@
             }
         },
         {
-            "name": "Mojito",
+            "name": "Manhattan",
             "ingredients": {
-                "Rum": {
+                "Whiskey": {
                     "quantity": 50,
                     "temperature": "cold",
                     "optimal_temp_C": 4
                 },
-                "Lime Juice": {
-                    "quantity": 15,
+                "Sweet Vermouth": {
+                    "quantity": 20,
                     "temperature": "cold",
                     "optimal_temp_C": 4
                 },
-                "Simple Syrup": {
-                    "quantity": 10,
-                    "temperature": "cold",
-                    "optimal_temp_C": 4
-                },
-                "Soda Water": {
-                    "quantity": 100,
-                    "temperature": "cold",
-                    "optimal_temp_C": 4
-                },
-                "Mint": {
-                    "quantity": 10,
+                "Bitters": {
+                    "quantity": 1,
                     "temperature": "room",
                     "optimal_temp_C": 22
-                }
-            }
-        },
-        {
-            "name": "Daiquiri",
-            "ingredients": {
-                "Rum": {
-                    "quantity": 50,
-                    "temperature": "cold",
-                    "optimal_temp_C": 4
-                },
-                "Lime Juice": {
-                    "quantity": 15,
-                    "temperature": "cold",
-                    "optimal_temp_C": 4
-                },
-                "Simple Syrup": {
-                    "quantity": 10,
-                    "temperature": "cold",
-                    "optimal_temp_C": 4
                 }
             }
         }

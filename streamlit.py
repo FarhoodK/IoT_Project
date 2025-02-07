@@ -1,14 +1,24 @@
+import json
+import paho.mqtt.client as mqtt
 import streamlit as st
 import requests
 import pandas as pd
 from logger import Logger
 
 class SmartenderUI:
-    def __init__(self, api_base_url="http://localhost:8080"):
+    def __init__(self, api_base_url="http://localhost:8080", mqtt_broker="mqtt.eclipseprojects.io", mqtt_port=1883):
         self.api_base_url = api_base_url
         self.setup_page()
         self.initialize_session_state()
         self.logger = Logger("STREAMLIT")
+
+        # MQTT client for subscribing to Smartender status updates.
+        self.mqtt_client = mqtt.Client(client_id="SmartenderUI", protocol=mqtt.MQTTv311, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+        self.mqtt_port = mqtt_port
+        self.mqtt_broker = mqtt_broker
+        self.mqtt_client.on_connect = self.on_connect
+        self.mqtt_client.on_message = self.on_message
+        self.mqtt_client.on_subscribe = self.on_subscribe
 
     def setup_page(self):
         st.set_page_config(page_title="Smartender", page_icon="🍹")
@@ -17,17 +27,56 @@ class SmartenderUI:
         # Initialize session state components if they don't exist
         if "selected_cocktails" not in st.session_state:
             st.session_state.selected_cocktails = []
-        if "mqtt_messages" not in st.session_state:
-            st.session_state.mqtt_messages = []
         if "authenticated" not in st.session_state:
             st.session_state.authenticated = False
-        if "current_cocktail" not in st.session_state:
-            st.session_state.current_cocktail = None
-        if "current_user" not in st.session_state:
-            st.session_state.current_user = None
-        if "cocktail_status" not in st.session_state:
-            st.session_state.cocktail_status = "Idle"
+        if "status" not in st.session_state:
+            st.session_state.status = "Idle"
+        if "pump_status" not in st.session_state:
+            st.session_state.pump_status = {}
 
+    def start_mqtt_client(self):
+        try:
+            self.mqtt_client.connect(self.mqtt_broker, self.mqtt_port)
+            self.mqtt_client.loop_start()
+        except Exception as e:
+            st.error(f"Error connecting to MQTT broker: {e}")
+            self.logger.error(f"Error connecting to MQTT broker: {e}")
+
+    def on_connect(self, client, userdata, flags, rc):
+        # Called when the client connects to the broker.
+        client.subscribe("smartender/#")  # Subscribe to topics you want to listen to
+        self.logger.info("Connected to MQTT Broker")
+
+    def on_message(self, client, userdata, message):
+        # Called when a new message is received.
+        try:
+            payload = json.loads(message.payload.decode())  # Decode the incoming message payload
+        
+            # Process different topics based on their names
+            if message.topic == "smartender/pump_status":
+                self.update_pump_status(payload)
+                self.logger.info(f"Received pump status: {payload}")
+            elif message.topic == "smartender/status":
+                self.update_status(payload)
+                self.logger.info(f"Received status update: {payload}")
+
+        except json.JSONDecodeError as e:
+            st.error(f"Error decoding MQTT message on topic {message.topic}: {e}")
+        except Exception as e:
+            self.logger.error(f"Error handling MQTT message on topic {message.topic}: {e}")
+
+    def on_subscribe(self, client, userdata, mid, granted_qos):
+        # Optional: handle subscription confirmation
+        self.logger.info(f"Subscribed to topic with QoS {granted_qos} and message ID {mid}")
+
+    def update_pump_status(self, status_data):
+        pump_id = status_data['Pump_Number']
+        if pump_id is not None:
+            st.session_state.pump_status[pump_id] = status_data
+        
+    def update_status(self, status_data):
+        st.session_state.status = status_data['status']
+    
     def fetch_available_cocktails(self):
         try:
             response = requests.get(f"{self.api_base_url}/cocktails")
@@ -35,38 +84,6 @@ class SmartenderUI:
         except Exception as e:
             st.error(f"Error fetching cocktails: {e}")
             return []
-
-    def select_cocktail(self, cocktail_name):
-        try:
-            response = requests.post(
-                f"{self.api_base_url}/select_cocktail", 
-                json={"cocktail_name": cocktail_name}
-            )
-            if response.status_code == 200:
-                st.success(f"{cocktail_name} selected successfully!")
-                # Add the cocktail to selected cocktails in session state
-                if cocktail_name not in st.session_state.selected_cocktails:
-                    st.session_state.selected_cocktails.append(cocktail_name)
-            else:
-                st.error(f"Error selecting cocktail: {response.json().get('error', 'Unknown error')}")
-        except Exception as e:
-            st.error(f"Error selecting cocktail: {e}")
-
-    def make_cocktail(self, cocktail_name):
-        try:
-            response = requests.post(
-                f"{self.api_base_url}/make_cocktail", 
-                json={"cocktail_name": cocktail_name, "user": "Streamlit User"}
-            )
-            if response.status_code == 200:
-                st.session_state.current_cocktail = cocktail_name
-                st.session_state.current_user = "Streamlit User"
-                st.session_state.cocktail_status = "Processing..."
-                st.success(f"Preparing {cocktail_name}...")
-            else:
-                st.error(f"Error making cocktail: {response.json().get('error', 'Unknown error')}")
-        except Exception as e:
-            st.error(f"Error making cocktail: {e}")
 
     def render_home_page(self):
         st.title("Welcome to Smartender!🍹")
@@ -82,26 +99,6 @@ class SmartenderUI:
         st.write("2. **Pump Status**: Check the status of the pumps to ensure everything is ready (Admin required).")
         st.write("3. **Make Cocktail**: Choose a cocktail and let Smartender prepare it for you.")
 
-    def render_status_page(self):
-        st.subheader("Smartender Status")
-
-        # Placeholder for dynamic content
-        cocktail_status_placeholder = st.empty()
-
-        # Display current cocktail status if available
-        if st.session_state.current_cocktail:
-            with cocktail_status_placeholder:
-                st.markdown(f"Request by **{st.session_state.current_user}**")
-                st.markdown(f"🍹 **Preparing:** {st.session_state.current_cocktail}")
-                st.markdown(f"⏳ **Status:** {st.session_state.cocktail_status}")
-
-            if st.session_state.cocktail_status.lower() == "done":
-                cocktail_status_placeholder.success(f"✅ {st.session_state.current_cocktail} is ready!")
-            elif st.session_state.cocktail_status.lower() == "error":
-                cocktail_status_placeholder.error(f"⚠️ Error preparing {st.session_state.current_cocktail}. Check the system.")
-        else:
-            cocktail_status_placeholder.write("Smartender is idle. Ready to make a cocktail.")
-
     def render_configure_page(self):
         st.subheader("Configure your Smartender")
 
@@ -115,8 +112,8 @@ class SmartenderUI:
                 if submit_button:
                     if username == "admin" and password == "password":
                         st.session_state.authenticated = True
-                        self.logger.info("Admin logged in successfully")
                         st.rerun()
+                        self.logger.info("Admin logged in successfully")
                     else:
                         st.error("Invalid credentials")
         else:
@@ -125,7 +122,7 @@ class SmartenderUI:
                 st.session_state.authenticated = False
 
             # Admin Tabs
-            tab_configure, tab_status = st.tabs(["Configure Your Smartender", "Pump Status"])
+            tab_configure, tab_pumps = st.tabs(["Configure Your Smartender", "Status"])
 
             with tab_configure:
                 st.subheader("Configure Your Smartender")
@@ -166,47 +163,57 @@ class SmartenderUI:
                     except Exception as e:
                         st.error(f"Error configuring pumps: {e}")
 
-            with tab_status:
-                st.subheader("System Status")
-                
-                # Fetch system status
-                try:
-                    status_response = requests.get(f"{self.api_base_url}/status")
-                    pump_response = requests.get(f"{self.api_base_url}/pump_status")
-                    
-                    system_status = status_response.json()
-                    pump_status = pump_response.json()
-                    
-                    st.metric("Current Status", system_status.get('status', 'Unknown'))
-                    st.metric("Current Task", system_status.get('current_task', 'None'))
-                    
-                    st.subheader("Active Pumps")
-                    for pump in pump_status:
-                        with st.expander(f"Pump {pump['id']}: {pump['ingredient']}"):
-                            st.metric("Temperature", f"{pump['temperature']}°C")
-                            st.metric("Remaining Quantity", f"{pump['remaining_quantity']}%")
-                            st.text("Used in Cocktails:")
-                            st.text(", ".join(pump['cocktails']))
-                
-                except Exception as e:
-                    st.error(f"Error fetching system status: {e}")
+            with tab_pumps:
+                st.subheader("Smartender Status")
+                st.write(f"Current Status: {st.session_state.status}")
+                st.subheader("Pumps Status")
+                if not st.session_state.pump_status:
+                    st.warning("No pumps configured or no data received yet.")
+                else:
+                    for pump_id, pump_data in st.session_state.pump_status.items():
+                        with st.expander(f"Pump {pump_id} - {pump_data.get('Ingredient', 'Unknown')}", expanded=True):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Current Temperature", f"{pump_data.get('Current_Temperature', 'N/A')}°C")
+                            with col2:
+                                st.metric("Remaining Quantity", f"{pump_data.get('Remaining_Quantity', 'N/A')}%")
+
+                            st.caption(f"Maintenance Status: {pump_data.get('Maintenance', 'Unknown')}")
+                            st.caption(f"Configured Cocktails: {', '.join(pump_data.get('Cocktails', []))}")
+
+                            tab1, tab2 = st.tabs(["Temperature History", "Quantity History"])
+
+                            with tab1:
+                                if 'Temperature_History' in pump_data and len(pump_data['Temperature_History']) > 1:
+                                    temp_df = pd.DataFrame(pump_data['Temperature_History'])
+                                    temp_df['timestamp'] = pd.to_datetime(temp_df['timestamp'])
+                                    temp_df.set_index('timestamp', inplace=True)
+                                    st.line_chart(temp_df, y='temperature')
+                                else:
+                                    st.info("Collecting temperature data...")
+
+                            with tab2:
+                                if 'Quantity_History' in pump_data and len(pump_data['Quantity_History']) > 1:
+                                    qty_df = pd.DataFrame(pump_data['Quantity_History'])
+                                    qty_df['timestamp'] = pd.to_datetime(qty_df['timestamp'])
+                                    qty_df.set_index('timestamp', inplace=True)
+                                    st.line_chart(qty_df, y='quantity')
+                                else:
+                                    st.info("Collecting quantity data...")
 
     def render_ui(self):
         # Sidebar menu
         menu = st.sidebar.selectbox("Menu", [
             "Home",
-            "Status", 
             "Configure"
         ])
 
         # Render appropriate page based on menu selection
         if menu == "Home":
             self.render_home_page()
-        elif menu == "Status":
-            self.render_status_page()
         elif menu == "Configure":
             self.render_configure_page()
 
 if __name__ == "__main__":
-    ui = SmartenderUI()  # Initialize UI
-    ui.render_ui()  # Render the UI
+    ui = SmartenderUI() # Initialize UI
+    ui.render_ui()      # Render the UI

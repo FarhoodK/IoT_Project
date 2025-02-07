@@ -1,9 +1,10 @@
 import logging
 
 class Logger:
-    def __init__(self, name):
+    def __init__(self, name, smartender=None):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
+        self.smartender = smartender
         
         # Adding square brackets around the timestamp
         formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(name)s %(message)s',
